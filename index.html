@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1b1f2a">
 <title>CodeMaze</title>
 <style>
   :root {
@@ -16,23 +20,28 @@
     --mouse-color: #ffd166;
     --cheese-color: #ffe066;
   }
-  * { box-sizing: border-box; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
     margin: 0; padding: 0; width: 100%; height: 100%;
     background: var(--bg);
     color: var(--text);
     font-family: 'Trebuchet MS', 'Segoe UI', Verdana, sans-serif;
     overflow: hidden;
+    overscroll-behavior: none;
     touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
   }
   #app {
     width: 100vw;
     height: 100vh;
+    height: 100dvh;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     padding: 8px;
+    padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
   }
   #title {
     font-size: clamp(18px, 3vw, 28px);
@@ -115,6 +124,7 @@
   .icon-btn {
     cursor: pointer;
     user-select: none;
+    -webkit-touch-callout: none;
     background: #2d3548;
     transition: transform 0.08s ease, background 0.15s ease;
     font-weight: 700;
@@ -127,7 +137,7 @@
   .btn-clear { background: #5a2d36; }
   .btn-clear:hover { background: #6e3743; }
   .btn-start { background: #1f5a4a; }
-  .btn-start:hover { background: #277josh; background: #277a63; }
+  .btn-start:hover { background: #277a63; }
   .btn-score { background: #3a3a5a; }
   .btn-score:hover { background: #46466e; }
   .toolbar-text {
@@ -236,7 +246,7 @@
 (function() {
   // ---------- Config ----------
   const MAZE_W = 5, MAZE_H = 15;
-  const INSTR_W = 2, INSTR_H = 15, MAX_STEPS = INSTR_H; // 2 wide (number col + instruction col), 15 rows
+  const INSTR_W = 2, INSTR_H = 15, MAX_STEPS = INSTR_H;
   const STEP_MS = 500;
 
   const DIRS = {
@@ -247,15 +257,11 @@
   };
 
   // ---------- State ----------
-  let instructions = []; // array of {type: 'dir'|'mult', value: 'left'|2|3|5}
+  let instructions = [];
   let running = false;
-  let score = parseScoreStore();
+  let score = { wins: 0, attempts: 0, bestSteps: null };
   let mouse = { x: 0, y: MAZE_H - 1 };
   const cheese = { x: MAZE_W - 1, y: 0 };
-
-  function parseScoreStore() {
-    return { wins: 0, attempts: 0, bestSteps: null };
-  }
 
   // ---------- SVG Icons ----------
   function arrowSVG(dir) {
@@ -309,7 +315,6 @@
   }
 
   function renderMazeEntities() {
-    // clear
     mazeCells.forEach(row => row.forEach(c => c.innerHTML = ''));
     mazeCells[cheese.y][cheese.x].innerHTML = cheeseSVG();
     mazeCells[mouse.y][mouse.x].innerHTML = mouseSVG();
@@ -347,7 +352,6 @@
       instrGridEl.appendChild(rowCellGroup);
       instrRowEls.push(content);
     }
-    // fix grid template since we used custom rows
     instrGridEl.style.gridTemplateColumns = '1fr';
     instrGridEl.style.gridTemplateRows = `repeat(${INSTR_H}, minmax(0, 1fr))`;
     instrGridEl.style.display = 'grid';
@@ -380,13 +384,13 @@
   function buildToolbar() {
     toolbarEl.innerHTML = '';
     const items = [
-      { kind: 'mult', value: 2, label: '2' },
-      { kind: 'mult', value: 3, label: '3' },
-      { kind: 'mult', value: 5, label: '5' },
       { kind: 'dir', value: 'left' },
       { kind: 'dir', value: 'right' },
       { kind: 'dir', value: 'top' },
       { kind: 'dir', value: 'bottom' },
+      { kind: 'mult', value: 2, label: '2' },
+      { kind: 'mult', value: 3, label: '3' },
+      { kind: 'mult', value: 5, label: '5' },
       { kind: 'action', value: 'clear', label: 'Clear' },
       { kind: 'action', value: 'start', label: 'Start' },
       { kind: 'action', value: 'score', label: 'Score' },
@@ -466,21 +470,15 @@
     setStatus('Running...');
     resetMousePosition();
 
-    // Validate & expand into executable moves, step by step (each list entry = 1 tick of 500ms)
-    let i = 0;
     let success = true;
     let errorMsg = '';
+    let pendingDir = null;
 
-    // Walk through instructions in order; a 'mult' must immediately follow a 'dir'
-    let pendingDir = null; // the direction value awaiting possible multiplier
-    let pendingRepeatsLeft = 0; // not used directly; we process one tick at a time
-
-    for (i = 0; i < instructions.length; i++) {
+    for (let i = 0; i < instructions.length; i++) {
       const step = instructions[i];
       await sleep(STEP_MS);
 
       if (step.type === 'dir') {
-        // a fresh direction step: move once
         moveMouse(step.value);
         renderMazeEntities();
         pendingDir = step.value;
@@ -491,12 +489,11 @@
           errorMsg = 'Error: multiplier with no direction before it!';
           break;
         }
-        // repeat the previous direction (value-1) MORE times, this tick represents the whole multiply action
         for (let k = 0; k < step.value - 1; k++) {
           moveMouse(pendingDir);
         }
         renderMazeEntities();
-        pendingDir = null; // multiplier consumed; require a new direction before another multiplier
+        pendingDir = null;
         if (checkWin()) { success = true; break; }
       }
     }
@@ -539,7 +536,6 @@
     const d = DIRS[dir];
     let nx = mouse.x + d.dx;
     let ny = mouse.y + d.dy;
-    // blocked at edges -> stays in place
     if (nx < 0 || nx >= MAZE_W || ny < 0 || ny >= MAZE_H) {
       return;
     }
@@ -576,16 +572,21 @@
   buildToolbar();
 
   // ---------- Responsive sizing ----------
+  function getViewportHeight() {
+    return (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+  }
   function fitLayout() {
-    const wrap = document.getElementById('gameWrap');
-    const topRow = document.getElementById('topRow');
     const toolbarPanel = document.getElementById('toolbarPanel');
-    // toolbar height proportional to viewport
-    const vh = window.innerHeight;
+    const vh = getViewportHeight();
     const toolbarH = Math.max(64, Math.min(110, vh * 0.11));
     toolbarPanel.style.height = toolbarH + 'px';
+    document.getElementById('app').style.height = vh + 'px';
   }
   window.addEventListener('resize', fitLayout);
+  window.addEventListener('orientationchange', () => setTimeout(fitLayout, 100));
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', fitLayout);
+  }
   fitLayout();
 })();
 </script>
