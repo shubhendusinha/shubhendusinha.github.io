@@ -453,6 +453,17 @@
     instructions = [];
     setStatus('');
     renderInstructions();
+    randomizeMousePosition();
+  }
+
+  function randomizeMousePosition() {
+    let nx, ny;
+    do {
+      nx = Math.floor(Math.random() * MAZE_W);
+      ny = Math.floor(Math.random() * MAZE_H);
+    } while (nx === cheese.x && ny === cheese.y);
+    mouse = { x: nx, y: ny };
+    renderMazeEntities();
   }
 
   function resetMousePosition() {
@@ -550,7 +561,7 @@
   function hardReset() {
     instructions = [];
     renderInstructions();
-    resetMousePosition();
+    randomizeMousePosition();
   }
 
   function sleep(ms) { return new Promise(res => setTimeout(res, ms)); }
