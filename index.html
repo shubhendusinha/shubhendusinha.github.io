@@ -1,7 +1,593 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CodeMaze</title>
+<style>
+  :root {
+    --bg: #1b1f2a;
+    --panel: #252b3a;
+    --cell-border: #3a4255;
+    --accent: #4fd1c5;
+    --accent-dark: #2c9d92;
+    --text: #eef2f7;
+    --danger: #ff5d6c;
+    --mouse-color: #ffd166;
+    --cheese-color: #ffe066;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Trebuchet MS', 'Segoe UI', Verdana, sans-serif;
+    overflow: hidden;
+    touch-action: manipulation;
+  }
+  #app {
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 8px;
+  }
+  #title {
+    font-size: clamp(18px, 3vw, 28px);
+    font-weight: 800;
+    letter-spacing: 2px;
+    color: var(--accent);
+    text-shadow: 0 0 12px rgba(79,209,197,0.5);
+    margin-bottom: 6px;
+    flex-shrink: 0;
+  }
+  #gameWrap {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+    height: 100%;
+    max-width: 100%;
+    max-height: 100%;
+  }
+  #topRow {
+    display: flex;
+    gap: 8px;
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+    justify-content: center;
+  }
+  .panel {
+    background: var(--panel);
+    border-radius: 12px;
+    padding: 6px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+    display: flex;
+    flex-direction: column;
+  }
+  .panel-label {
+    font-size: clamp(9px, 1.3vw, 12px);
+    text-align: center;
+    color: #9aa4b8;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+    flex-shrink: 0;
+  }
+  /* Grids */
+  .grid {
+    display: grid;
+    gap: 3px;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  #instrGrid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-rows: repeat(10, minmax(0, 1fr));
+  }
+  #mazeGrid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-rows: repeat(15, minmax(0, 1fr));
+  }
+  #toolbar {
+    grid-template-columns: repeat(10, 1fr);
+    grid-template-rows: 1fr;
+    gap: 4px;
+  }
+  .cell {
+    background: #1a1f2b;
+    border: 1px solid var(--cell-border);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    min-width: 0;
+    min-height: 0;
+  }
+  .maze-cell {
+    background: #1a1f2bb0;
+    border: 1px solid #2c3344;
+  }
+  .icon-btn {
+    cursor: pointer;
+    user-select: none;
+    background: #2d3548;
+    transition: transform 0.08s ease, background 0.15s ease;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .icon-btn:hover { background: #38415a; }
+  .icon-btn:active { transform: scale(0.92); }
+  .icon-btn svg { width: 60%; height: 60%; pointer-events: none; }
+  .icon-num { font-size: clamp(12px, 2.2vw, 22px); pointer-events: none; }
+  .btn-clear { background: #5a2d36; }
+  .btn-clear:hover { background: #6e3743; }
+  .btn-start { background: #1f5a4a; }
+  .btn-start:hover { background: #277josh; background: #277a63; }
+  .btn-score { background: #3a3a5a; }
+  .btn-score:hover { background: #46466e; }
+  .toolbar-text {
+    font-size: clamp(9px, 1.6vw, 14px);
+    font-weight: 700;
+    pointer-events: none;
+    text-align: center;
+    line-height: 1.1;
+  }
+  .instr-filled {
+    background: #313b54;
+    font-size: clamp(9px, 1.5vw, 13px);
+    font-weight: 700;
+    flex-direction: row;
+    gap: 2px;
+  }
+  .instr-filled.is-dir { color: var(--accent); }
+  .instr-filled.is-mult { color: #ffb86b; }
+  .instr-empty-row { background: #1a1f2b80; }
+  /* mouse & cheese */
+  .mouse-icon, .cheese-icon {
+    width: 70%;
+    height: 70%;
+    transition: all 0.45s ease;
+  }
+  #statusBar {
+    height: 22px;
+    flex-shrink: 0;
+    text-align: center;
+    font-size: clamp(11px, 1.8vw, 15px);
+    font-weight: 700;
+    color: var(--accent);
+    min-height: 18px;
+  }
+  #statusBar.error { color: var(--danger); animation: shake 0.4s; }
+  @keyframes shake {
+    0%,100% { transform: translateX(0); }
+    25% { transform: translateX(-6px); }
+    75% { transform: translateX(6px); }
+  }
+  #scoreOverlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(10,12,18,0.85);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+  }
+  #scoreOverlay.show { display: flex; }
+  #scoreBox {
+    background: var(--panel);
+    border-radius: 16px;
+    padding: 28px 40px;
+    text-align: center;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+  }
+  #scoreBox h2 { margin: 0 0 10px; color: var(--accent); }
+  #scoreBox p { font-size: 28px; font-weight: 800; margin: 6px 0; }
+  #scoreBox button {
+    margin-top: 16px;
+    padding: 10px 24px;
+    border: none;
+    border-radius: 8px;
+    background: var(--accent);
+    color: #11151c;
+    font-weight: 800;
+    font-size: 15px;
+    cursor: pointer;
+  }
+  .win-glow { box-shadow: 0 0 0 3px var(--accent) inset; }
+</style>
+</head>
 <body>
-<h1>Hello World</h1>
-<p>I'm hosted with GitHub Pages.</p>
+<div id="app">
+  <div id="title">🧩 CodeMaze</div>
+  <div id="gameWrap">
+    <div id="topRow">
+      <div class="panel" id="instrPanel" style="flex: 2;">
+        <div class="panel-label">Program</div>
+        <div class="grid" id="instrGrid"></div>
+      </div>
+      <div class="panel" id="mazePanel" style="flex: 5;">
+        <div class="panel-label">Maze</div>
+        <div class="grid" id="mazeGrid"></div>
+      </div>
+    </div>
+    <div id="statusBar"></div>
+    <div class="panel" id="toolbarPanel">
+      <div class="panel-label">Instructions</div>
+      <div class="grid" id="toolbar"></div>
+    </div>
+  </div>
+</div>
+
+<div id="scoreOverlay">
+  <div id="scoreBox">
+    <h2>Score</h2>
+    <p id="scoreValue">0</p>
+    <div id="scoreDetail" style="font-size:13px;color:#9aa4b8;"></div>
+    <button id="closeScore">Close</button>
+  </div>
+</div>
+
+<script>
+(function() {
+  // ---------- Config ----------
+  const MAZE_W = 5, MAZE_H = 15;
+  const INSTR_W = 2, INSTR_H = 15, MAX_STEPS = INSTR_H; // 2 wide (number col + instruction col), 15 rows
+  const STEP_MS = 500;
+
+  const DIRS = {
+    left:  { dx: -1, dy: 0 },
+    right: { dx: 1,  dy: 0 },
+    top:   { dx: 0,  dy: -1 },
+    bottom:{ dx: 0,  dy: 1 }
+  };
+
+  // ---------- State ----------
+  let instructions = []; // array of {type: 'dir'|'mult', value: 'left'|2|3|5}
+  let running = false;
+  let score = parseScoreStore();
+  let mouse = { x: 0, y: MAZE_H - 1 };
+  const cheese = { x: MAZE_W - 1, y: 0 };
+
+  function parseScoreStore() {
+    return { wins: 0, attempts: 0, bestSteps: null };
+  }
+
+  // ---------- SVG Icons ----------
+  function arrowSVG(dir) {
+    const rot = { left: 180, right: 0, top: 270, bottom: 90 }[dir];
+    return `<svg viewBox="0 0 24 24" style="transform:rotate(${rot}deg)" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="4" y1="12" x2="20" y2="12"></line>
+      <polyline points="13 5 20 12 13 19"></polyline>
+    </svg>`;
+  }
+
+  function mouseSVG() {
+    return `<svg class="mouse-icon" viewBox="0 0 64 64">
+      <ellipse cx="34" cy="36" rx="20" ry="16" fill="#d9b8ff"/>
+      <circle cx="14" cy="22" r="8" fill="#d9b8ff"/>
+      <circle cx="26" cy="14" r="6" fill="#d9b8ff"/>
+      <circle cx="27" cy="13" r="2.2" fill="#2a2a2a"/>
+      <ellipse cx="10" cy="40" rx="3" ry="14" fill="#d9b8ff" transform="rotate(-30 10 40)"/>
+      <circle cx="44" cy="30" r="2.2" fill="#2a2a2a"/>
+      <circle cx="46" cy="38" r="2" fill="#ff8fa3"/>
+    </svg>`;
+  }
+
+  function cheeseSVG() {
+    return `<svg class="cheese-icon" viewBox="0 0 64 64">
+      <polygon points="6,50 58,50 32,10" fill="#ffe066" stroke="#e0a800" stroke-width="2"/>
+      <circle cx="30" cy="38" r="3" fill="#e0a800"/>
+      <circle cx="22" cy="44" r="2.2" fill="#e0a800"/>
+      <circle cx="38" cy="44" r="2.5" fill="#e0a800"/>
+    </svg>`;
+  }
+
+  // ---------- Build Maze Grid ----------
+  const mazeGridEl = document.getElementById('mazeGrid');
+  let mazeCells = [];
+  function buildMaze() {
+    mazeGridEl.innerHTML = '';
+    mazeCells = [];
+    for (let y = 0; y < MAZE_H; y++) {
+      const row = [];
+      for (let x = 0; x < MAZE_W; x++) {
+        const cell = document.createElement('div');
+        cell.className = 'cell maze-cell';
+        cell.dataset.x = x;
+        cell.dataset.y = y;
+        mazeGridEl.appendChild(cell);
+        row.push(cell);
+      }
+      mazeCells.push(row);
+    }
+    renderMazeEntities();
+  }
+
+  function renderMazeEntities() {
+    // clear
+    mazeCells.forEach(row => row.forEach(c => c.innerHTML = ''));
+    mazeCells[cheese.y][cheese.x].innerHTML = cheeseSVG();
+    mazeCells[mouse.y][mouse.x].innerHTML = mouseSVG();
+  }
+
+  // ---------- Build Instruction Grid ----------
+  const instrGridEl = document.getElementById('instrGrid');
+  let instrRowEls = [];
+  function buildInstrGrid() {
+    instrGridEl.innerHTML = '';
+    instrRowEls = [];
+    for (let r = 0; r < INSTR_H; r++) {
+      const rowCellGroup = document.createElement('div');
+      rowCellGroup.style.gridColumn = `1 / span ${INSTR_W}`;
+      rowCellGroup.style.gridRow = `${r + 1}`;
+      rowCellGroup.style.display = 'flex';
+      rowCellGroup.style.gap = '3px';
+      rowCellGroup.style.minWidth = '0';
+      rowCellGroup.style.minHeight = '0';
+
+      const numLabel = document.createElement('div');
+      numLabel.className = 'cell instr-empty-row';
+      numLabel.style.flex = '0 0 22%';
+      numLabel.style.fontSize = 'clamp(7px,1vw,10px)';
+      numLabel.style.color = '#5c6378';
+      numLabel.textContent = r + 1;
+
+      const content = document.createElement('div');
+      content.className = 'cell instr-empty-row';
+      content.style.flex = '1';
+      content.dataset.row = r;
+
+      rowCellGroup.appendChild(numLabel);
+      rowCellGroup.appendChild(content);
+      instrGridEl.appendChild(rowCellGroup);
+      instrRowEls.push(content);
+    }
+    // fix grid template since we used custom rows
+    instrGridEl.style.gridTemplateColumns = '1fr';
+    instrGridEl.style.gridTemplateRows = `repeat(${INSTR_H}, minmax(0, 1fr))`;
+    instrGridEl.style.display = 'grid';
+    renderInstructions();
+  }
+
+  function renderInstructions() {
+    instrRowEls.forEach((el, i) => {
+      el.innerHTML = '';
+      el.className = 'cell instr-empty-row';
+      const step = instructions[i];
+      if (step) {
+        el.classList.remove('instr-empty-row');
+        el.classList.add('instr-filled');
+        if (step.type === 'dir') {
+          el.classList.add('is-dir');
+          el.innerHTML = `<span style="width:18px;height:18px;display:inline-flex">${arrowSVG(step.value)}</span><span class="toolbar-text">${capitalize(step.value)}</span>`;
+        } else {
+          el.classList.add('is-mult');
+          el.innerHTML = `<span class="toolbar-text">× ${step.value}</span>`;
+        }
+      }
+    });
+  }
+
+  function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+  // ---------- Build Toolbar ----------
+  const toolbarEl = document.getElementById('toolbar');
+  function buildToolbar() {
+    toolbarEl.innerHTML = '';
+    const items = [
+      { kind: 'mult', value: 2, label: '2' },
+      { kind: 'mult', value: 3, label: '3' },
+      { kind: 'mult', value: 5, label: '5' },
+      { kind: 'dir', value: 'left' },
+      { kind: 'dir', value: 'right' },
+      { kind: 'dir', value: 'top' },
+      { kind: 'dir', value: 'bottom' },
+      { kind: 'action', value: 'clear', label: 'Clear' },
+      { kind: 'action', value: 'start', label: 'Start' },
+      { kind: 'action', value: 'score', label: 'Score' },
+    ];
+    items.forEach(item => {
+      const cell = document.createElement('div');
+      cell.className = 'cell icon-btn';
+      if (item.kind === 'mult') {
+        cell.innerHTML = `<span class="icon-num">${item.label}</span>`;
+        cell.addEventListener('click', () => onMultClick(item.value));
+      } else if (item.kind === 'dir') {
+        cell.innerHTML = `<span style="width:50%;height:50%;display:flex">${arrowSVG(item.value)}</span>`;
+        cell.addEventListener('click', () => onDirClick(item.value));
+      } else {
+        cell.classList.add('btn-' + item.value);
+        if (item.value === 'score') {
+          cell.innerHTML = `<span class="toolbar-text">Score<br><span id="scoreCount">0</span></span>`;
+        } else {
+          cell.innerHTML = `<span class="toolbar-text">${item.label}</span>`;
+        }
+        if (item.value === 'clear') cell.addEventListener('click', onClear);
+        if (item.value === 'start') cell.addEventListener('click', onStart);
+        if (item.value === 'score') cell.addEventListener('click', onScore);
+      }
+      toolbarEl.appendChild(cell);
+    });
+  }
+
+  // ---------- Interaction ----------
+  function setStatus(msg, isError) {
+    const bar = document.getElementById('statusBar');
+    bar.textContent = msg || '';
+    bar.classList.toggle('error', !!isError);
+  }
+
+  function onDirClick(dir) {
+    if (running) return;
+    if (instructions.length >= MAX_STEPS) {
+      setStatus('Instruction list full!', true);
+      return;
+    }
+    instructions.push({ type: 'dir', value: dir });
+    setStatus('');
+    renderInstructions();
+  }
+
+  function onMultClick(val) {
+    if (running) return;
+    if (instructions.length >= MAX_STEPS) {
+      setStatus('Instruction list full!', true);
+      return;
+    }
+    instructions.push({ type: 'mult', value: val });
+    setStatus('');
+    renderInstructions();
+  }
+
+  function onClear() {
+    if (running) return;
+    instructions = [];
+    setStatus('');
+    renderInstructions();
+  }
+
+  function resetMousePosition() {
+    mouse = { x: 0, y: MAZE_H - 1 };
+    renderMazeEntities();
+  }
+
+  async function onStart() {
+    if (running) return;
+    if (instructions.length === 0) {
+      setStatus('Add some instructions first!', true);
+      return;
+    }
+    running = true;
+    setStatus('Running...');
+    resetMousePosition();
+
+    // Validate & expand into executable moves, step by step (each list entry = 1 tick of 500ms)
+    let i = 0;
+    let success = true;
+    let errorMsg = '';
+
+    // Walk through instructions in order; a 'mult' must immediately follow a 'dir'
+    let pendingDir = null; // the direction value awaiting possible multiplier
+    let pendingRepeatsLeft = 0; // not used directly; we process one tick at a time
+
+    for (i = 0; i < instructions.length; i++) {
+      const step = instructions[i];
+      await sleep(STEP_MS);
+
+      if (step.type === 'dir') {
+        // a fresh direction step: move once
+        moveMouse(step.value);
+        renderMazeEntities();
+        pendingDir = step.value;
+        if (checkWin()) { success = true; break; }
+      } else if (step.type === 'mult') {
+        if (pendingDir === null) {
+          success = false;
+          errorMsg = 'Error: multiplier with no direction before it!';
+          break;
+        }
+        // repeat the previous direction (value-1) MORE times, this tick represents the whole multiply action
+        for (let k = 0; k < step.value - 1; k++) {
+          moveMouse(pendingDir);
+        }
+        renderMazeEntities();
+        pendingDir = null; // multiplier consumed; require a new direction before another multiplier
+        if (checkWin()) { success = true; break; }
+      }
+    }
+
+    if (!success) {
+      setStatus(errorMsg || 'Error!', true);
+      await sleep(700);
+      hardReset();
+      running = false;
+      return;
+    }
+
+    if (checkWin()) {
+      score.wins++;
+      score.attempts++;
+      const stepsUsed = instructions.length;
+      if (score.bestSteps === null || stepsUsed < score.bestSteps) score.bestSteps = stepsUsed;
+      setStatus('🎉 You found the cheese!');
+      flashWin();
+      updateScoreDisplay();
+    } else {
+      score.attempts++;
+      setStatus('Out of moves — try again!');
+    }
+    running = false;
+  }
+
+  function updateScoreDisplay() {
+    const el = document.getElementById('scoreCount');
+    if (el) el.textContent = score.wins;
+  }
+
+  function flashWin() {
+    const el = mazeCells[mouse.y][mouse.x];
+    el.classList.add('win-glow');
+    setTimeout(() => el.classList.remove('win-glow'), 1200);
+  }
+
+  function moveMouse(dir) {
+    const d = DIRS[dir];
+    let nx = mouse.x + d.dx;
+    let ny = mouse.y + d.dy;
+    // blocked at edges -> stays in place
+    if (nx < 0 || nx >= MAZE_W || ny < 0 || ny >= MAZE_H) {
+      return;
+    }
+    mouse.x = nx;
+    mouse.y = ny;
+  }
+
+  function checkWin() {
+    return mouse.x === cheese.x && mouse.y === cheese.y;
+  }
+
+  function hardReset() {
+    instructions = [];
+    renderInstructions();
+    resetMousePosition();
+  }
+
+  function sleep(ms) { return new Promise(res => setTimeout(res, ms)); }
+
+  function onScore() {
+    document.getElementById('scoreValue').textContent = score.wins;
+    document.getElementById('scoreDetail').textContent =
+      `Attempts: ${score.attempts}` + (score.bestSteps !== null ? ` · Best: ${score.bestSteps} steps` : '');
+    document.getElementById('scoreOverlay').classList.add('show');
+  }
+
+  document.getElementById('closeScore').addEventListener('click', () => {
+    document.getElementById('scoreOverlay').classList.remove('show');
+  });
+
+  // ---------- Init ----------
+  buildMaze();
+  buildInstrGrid();
+  buildToolbar();
+
+  // ---------- Responsive sizing ----------
+  function fitLayout() {
+    const wrap = document.getElementById('gameWrap');
+    const topRow = document.getElementById('topRow');
+    const toolbarPanel = document.getElementById('toolbarPanel');
+    // toolbar height proportional to viewport
+    const vh = window.innerHeight;
+    const toolbarH = Math.max(64, Math.min(110, vh * 0.11));
+    toolbarPanel.style.height = toolbarH + 'px';
+  }
+  window.addEventListener('resize', fitLayout);
+  fitLayout();
+})();
+</script>
 </body>
 </html>
