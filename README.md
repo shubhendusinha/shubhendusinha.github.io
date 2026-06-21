@@ -18,4 +18,4 @@ An android application to help teach read and write Marathi language in devnagir
 ## Contact
 You can reach me on
 
- ![Contact Email](email_png.png)
+ ![Contact Email](contact.png)
